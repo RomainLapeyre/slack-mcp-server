@@ -86,11 +86,6 @@ func main() {
 
 	switch transport {
 	case "stdio":
-		if ready, _ := p.IsReady(); !ready && !noCache {
-			logger.Info("Slack MCP Server is still warming up caches, starting server anyway",
-				zap.String("context", "console"),
-			)
-		}
 		if err := s.ServeStdio(); err != nil {
 			logger.Fatal("Server error",
 				zap.String("context", "console"),
