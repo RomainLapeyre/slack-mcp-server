@@ -1614,6 +1614,34 @@ func (ch *ConversationsHandler) ConversationsJoinHandler(ctx context.Context, re
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully joined %s", channel)), nil
 }
 
+func (ch *ConversationsHandler) ConversationsRenameHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsRenameHandler called", zap.Any("params", request.Params))
+
+	channel := request.GetString("channel_id", "")
+	if channel == "" {
+		return nil, fmt.Errorf("channel_id is required")
+	}
+
+	name := request.GetString("name", "")
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	channel, err := ch.resolveChannelID(ctx, channel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve channel: %w", err)
+	}
+
+	renamed, err := ch.apiProvider.Slack().RenameConversationContext(ctx, channel, name)
+	if err != nil {
+		ch.logger.Error("Failed to rename conversation", zap.Error(err))
+		return nil, fmt.Errorf("failed to rename conversation: %v", err)
+	}
+
+	ch.logger.Info("Renamed conversation", zap.String("channel", channel), zap.String("name", renamed.Name))
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully renamed %s to #%s", channel, renamed.Name)), nil
+}
+
 // sortChannelsByPriority sorts channels: DMs > group_dm > partner > internal
 func (ch *ConversationsHandler) sortChannelsByPriority(channels []UnreadChannel) {
 	priority := map[string]int{

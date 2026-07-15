@@ -223,6 +223,7 @@ type SlackAPI interface {
 	RemoveReactionContext(ctx context.Context, name string, item slack.ItemRef) error
 	LeaveConversationContext(ctx context.Context, channelID string) (bool, error)
 	JoinConversationContext(ctx context.Context, channelID string) (*slack.Channel, string, []string, error)
+	RenameConversationContext(ctx context.Context, channelID, channelName string) (*slack.Channel, error)
 
 	// Used to get messages
 	GetConversationHistoryContext(ctx context.Context, params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
@@ -412,6 +413,10 @@ func (c *MCPSlackClient) LeaveConversationContext(ctx context.Context, channelID
 
 func (c *MCPSlackClient) JoinConversationContext(ctx context.Context, channelID string) (*slack.Channel, string, []string, error) {
 	return c.slackClient.JoinConversationContext(ctx, channelID)
+}
+
+func (c *MCPSlackClient) RenameConversationContext(ctx context.Context, channelID, channelName string) (*slack.Channel, error) {
+	return c.slackClient.RenameConversationContext(ctx, channelID, channelName)
 }
 
 func (c *MCPSlackClient) GetConversationsContext(ctx context.Context, params *slack.GetConversationsParameters) ([]slack.Channel, string, error) {

@@ -38,6 +38,7 @@ const (
 	ToolConversationsMark           = "conversations_mark"
 	ToolConversationsLeave          = "conversations_leave"
 	ToolConversationsJoin           = "conversations_join"
+	ToolConversationsRename         = "conversations_rename"
 	ToolChannelsList                = "channels_list"
 	ToolChannelsMe                  = "channels_me"
 	ToolUsergroupsList              = "usergroups_list"
@@ -65,6 +66,7 @@ var ValidToolNames = []string{
 	ToolConversationsMark,
 	ToolConversationsLeave,
 	ToolConversationsJoin,
+	ToolConversationsRename,
 	ToolChannelsList,
 	ToolChannelsMe,
 	ToolUsergroupsList,
@@ -424,6 +426,22 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 			),
 		), conversationsHandler.ConversationsJoinHandler)
 	}
+	if shouldAddTool(ToolConversationsRename, enabledTools, "SLACK_MCP_RENAME_CHANNEL_TOOL") {
+		s.AddTool(mcp.NewTool(ToolConversationsRename,
+			mcp.WithDescription("Rename a public or private channel. Requires the acting user to be the channel creator or a workspace admin/owner."),
+			mcp.WithTitleAnnotation("Rename Channel"),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("channel_id",
+				mcp.Required(),
+				mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... (e.g., #general)."),
+			),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("New name for the channel, without the leading #. Lowercase, no spaces (use hyphens)."),
+			),
+		), conversationsHandler.ConversationsRenameHandler)
+	}
+
 	channelsHandler := handler.NewChannelsHandler(provider, logger)
 	usergroupsHandler := handler.NewUsergroupsHandler(provider, logger)
 
