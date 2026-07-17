@@ -152,6 +152,11 @@ type inviteSharedParams struct {
 	emails  []string
 	userIDs []string
 }
+
+type inviteParams struct {
+	channel string
+	users   []string
+}
 type ConversationsHandler struct {
 	apiProvider *provider.ApiProvider
 	logger      *zap.Logger
@@ -429,6 +434,21 @@ func (ch *ConversationsHandler) parseParamsToolOpenConversation(ctx context.Cont
 		return nil, errors.New("users must be a non-empty comma-separated list of Slack user IDs, @handles, or emails")
 	}
 
+	userIDs, err := ch.resolveUserTokens(ctx, raw)
+	if err != nil {
+		return nil, err
+	}
+
+	return &openConversationParams{
+		users:    userIDs,
+		returnIM: request.GetBool("return_im", false),
+	}, nil
+}
+
+// resolveUserTokens resolves a comma-separated list of Slack user IDs, @handles, or emails
+// to their canonical user IDs, via SearchUsers (which already short-circuits to an exact ID
+// lookup when a token looks like a Slack user ID, so we don't duplicate that pattern match here).
+func (ch *ConversationsHandler) resolveUserTokens(ctx context.Context, raw string) ([]string, error) {
 	tokens := strings.Split(raw, ",")
 	userIDs := make([]string, 0, len(tokens))
 	for _, token := range tokens {
@@ -437,12 +457,9 @@ func (ch *ConversationsHandler) parseParamsToolOpenConversation(ctx context.Cont
 			continue
 		}
 
-		// SearchUsers already short-circuits to an exact ID lookup when token
-		// looks like a Slack user ID (Uxxxxxxxxxx), so we don't duplicate that
-		// pattern match here - every token, ID or handle, goes through it.
 		matches, err := ch.apiProvider.SearchUsers(ctx, token, 5)
 		if err != nil {
-			ch.logger.Error("Failed to resolve user for open-conversation", zap.String("query", token), zap.Error(err))
+			ch.logger.Error("Failed to resolve user", zap.String("query", token), zap.Error(err))
 			return nil, fmt.Errorf("failed to resolve user %q: %w", token, err)
 		}
 		exact := make([]slack.User, 0, 1)
@@ -467,10 +484,7 @@ func (ch *ConversationsHandler) parseParamsToolOpenConversation(ctx context.Cont
 		return nil, errors.New("no valid users resolved from the users parameter")
 	}
 
-	return &openConversationParams{
-		users:    userIDs,
-		returnIM: request.GetBool("return_im", false),
-	}, nil
+	return userIDs, nil
 }
 
 // ReactionsAddHandler adds an emoji reaction to a message
@@ -1685,6 +1699,49 @@ func (ch *ConversationsHandler) parseParamsToolCreateConversation(request mcp.Ca
 		name:      name,
 		isPrivate: request.GetBool("is_private", false),
 	}, nil
+}
+
+func (ch *ConversationsHandler) ConversationsInviteHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsInviteHandler called", zap.Any("params", request.Params))
+
+	params, err := ch.parseParamsToolInvite(ctx, request)
+	if err != nil {
+		ch.logger.Error("Failed to parse invite params", zap.Error(err))
+		return nil, err
+	}
+
+	channel, err := ch.apiProvider.Slack().InviteUsersToConversationContext(ctx, params.channel, params.users...)
+	if err != nil {
+		ch.logger.Error("Slack InviteUsersToConversationContext failed", zap.Error(err))
+		return nil, fmt.Errorf("failed to invite users to channel %s: %w", params.channel, err)
+	}
+
+	ch.logger.Info("Invited users to conversation", zap.String("channel", channel.ID), zap.Strings("users", params.users))
+	return mcp.NewToolResultText(fmt.Sprintf("Invited [%s] to %s", strings.Join(params.users, ", "), channel.ID)), nil
+}
+
+func (ch *ConversationsHandler) parseParamsToolInvite(ctx context.Context, request mcp.CallToolRequest) (*inviteParams, error) {
+	channel := request.GetString("channel_id", "")
+	if channel == "" {
+		return nil, errors.New("channel_id is required")
+	}
+
+	channel, err := ch.resolveChannelID(ctx, channel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve channel: %w", err)
+	}
+
+	raw := request.GetString("users", "")
+	if raw == "" {
+		return nil, errors.New("users must be a non-empty comma-separated list of Slack user IDs, @handles, or emails")
+	}
+
+	userIDs, err := ch.resolveUserTokens(ctx, raw)
+	if err != nil {
+		return nil, err
+	}
+
+	return &inviteParams{channel: channel, users: userIDs}, nil
 }
 
 func (ch *ConversationsHandler) ConversationsInviteSharedHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -40,6 +40,7 @@ const (
 	ToolConversationsJoin           = "conversations_join"
 	ToolConversationsRename         = "conversations_rename"
 	ToolConversationsCreate         = "conversations_create"
+	ToolConversationsInvite         = "conversations_invite"
 	ToolConversationsInviteShared   = "conversations_invite_shared"
 	ToolChannelsList                = "channels_list"
 	ToolChannelsMe                  = "channels_me"
@@ -70,6 +71,7 @@ var ValidToolNames = []string{
 	ToolConversationsJoin,
 	ToolConversationsRename,
 	ToolConversationsCreate,
+	ToolConversationsInvite,
 	ToolConversationsInviteShared,
 	ToolChannelsList,
 	ToolChannelsMe,
@@ -459,6 +461,22 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.Description("Whether the channel should be private. Default is false (public channel)."),
 			),
 		), conversationsHandler.ConversationsCreateHandler)
+	}
+
+	if shouldAddTool(ToolConversationsInvite, enabledTools, "SLACK_MCP_INVITE_TOOL") {
+		s.AddTool(mcp.NewTool(ToolConversationsInvite,
+			mcp.WithDescription("Invite one or more existing workspace members to a public or private channel."),
+			mcp.WithTitleAnnotation("Invite Users"),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithString("channel_id",
+				mcp.Required(),
+				mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... (e.g., #general)."),
+			),
+			mcp.WithString("users",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of Slack user IDs, @handles, or emails to invite, e.g. 'U0123456,U0654321' or '@iffat.hasan'."),
+			),
+		), conversationsHandler.ConversationsInviteHandler)
 	}
 
 	if shouldAddTool(ToolConversationsInviteShared, enabledTools, "SLACK_MCP_INVITE_SHARED_TOOL") {
