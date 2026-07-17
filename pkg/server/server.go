@@ -39,6 +39,8 @@ const (
 	ToolConversationsLeave          = "conversations_leave"
 	ToolConversationsJoin           = "conversations_join"
 	ToolConversationsRename         = "conversations_rename"
+	ToolConversationsCreate         = "conversations_create"
+	ToolConversationsInviteShared   = "conversations_invite_shared"
 	ToolChannelsList                = "channels_list"
 	ToolChannelsMe                  = "channels_me"
 	ToolUsergroupsList              = "usergroups_list"
@@ -67,6 +69,8 @@ var ValidToolNames = []string{
 	ToolConversationsLeave,
 	ToolConversationsJoin,
 	ToolConversationsRename,
+	ToolConversationsCreate,
+	ToolConversationsInviteShared,
 	ToolChannelsList,
 	ToolChannelsMe,
 	ToolUsergroupsList,
@@ -440,6 +444,39 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.Description("New name for the channel, without the leading #. Lowercase, no spaces (use hyphens)."),
 			),
 		), conversationsHandler.ConversationsRenameHandler)
+	}
+
+	if shouldAddTool(ToolConversationsCreate, enabledTools, "SLACK_MCP_CREATE_CHANNEL_TOOL") {
+		s.AddTool(mcp.NewTool(ToolConversationsCreate,
+			mcp.WithDescription("Create a new public or private channel. Returns the resulting channel_id, which can then be used with conversations_invite_shared or conversations_add_message."),
+			mcp.WithTitleAnnotation("Create Channel"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name for the new channel, without the leading #. Lowercase, no spaces (use hyphens)."),
+			),
+			mcp.WithBoolean("is_private",
+				mcp.DefaultBool(false),
+				mcp.Description("Whether the channel should be private. Default is false (public channel)."),
+			),
+		), conversationsHandler.ConversationsCreateHandler)
+	}
+
+	if shouldAddTool(ToolConversationsInviteShared, enabledTools, "SLACK_MCP_INVITE_SHARED_TOOL") {
+		s.AddTool(mcp.NewTool(ToolConversationsInviteShared,
+			mcp.WithDescription("Invite external people to a channel via Slack Connect, turning it into a shared channel. This sends a real invite (by email, or directly if the person already has a Slack Connect relationship) that is visible to the recipient outside this workspace - it is not a preview or a draft. Requires the acting user/token to have permission to send Slack Connect invites for this workspace."),
+			mcp.WithTitleAnnotation("Invite External User (Slack Connect)"),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("channel_id",
+				mcp.Required(),
+				mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... (e.g., #general)."),
+			),
+			mcp.WithString("emails",
+				mcp.Description("Comma-separated list of external email addresses to invite via Slack Connect, e.g. 'ben@platter.com'. Provide either emails or user_ids, not both."),
+			),
+			mcp.WithString("user_ids",
+				mcp.Description("Comma-separated list of Slack user IDs to invite via Slack Connect. Provide either emails or user_ids, not both."),
+			),
+		), conversationsHandler.ConversationsInviteSharedHandler)
 	}
 
 	channelsHandler := handler.NewChannelsHandler(provider, logger)

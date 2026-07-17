@@ -224,6 +224,9 @@ type SlackAPI interface {
 	LeaveConversationContext(ctx context.Context, channelID string) (bool, error)
 	JoinConversationContext(ctx context.Context, channelID string) (*slack.Channel, string, []string, error)
 	RenameConversationContext(ctx context.Context, channelID, channelName string) (*slack.Channel, error)
+	CreateConversationContext(ctx context.Context, params slack.CreateConversationParams) (*slack.Channel, error)
+	InviteSharedEmailsToConversationContext(ctx context.Context, channelID string, emails ...string) (string, bool, error)
+	InviteSharedUserIDsToConversationContext(ctx context.Context, channelID string, userIDs ...string) (string, bool, error)
 
 	// Used to get messages
 	GetConversationHistoryContext(ctx context.Context, params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
@@ -417,6 +420,18 @@ func (c *MCPSlackClient) JoinConversationContext(ctx context.Context, channelID 
 
 func (c *MCPSlackClient) RenameConversationContext(ctx context.Context, channelID, channelName string) (*slack.Channel, error) {
 	return c.slackClient.RenameConversationContext(ctx, channelID, channelName)
+}
+
+func (c *MCPSlackClient) CreateConversationContext(ctx context.Context, params slack.CreateConversationParams) (*slack.Channel, error) {
+	return c.slackClient.CreateConversationContext(ctx, params)
+}
+
+func (c *MCPSlackClient) InviteSharedEmailsToConversationContext(ctx context.Context, channelID string, emails ...string) (string, bool, error) {
+	return c.slackClient.InviteSharedEmailsToConversationContext(ctx, channelID, emails...)
+}
+
+func (c *MCPSlackClient) InviteSharedUserIDsToConversationContext(ctx context.Context, channelID string, userIDs ...string) (string, bool, error) {
+	return c.slackClient.InviteSharedUserIDsToConversationContext(ctx, channelID, userIDs...)
 }
 
 func (c *MCPSlackClient) GetConversationsContext(ctx context.Context, params *slack.GetConversationsParameters) ([]slack.Channel, string, error) {

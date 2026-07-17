@@ -141,6 +141,17 @@ type markParams struct {
 	channel string
 	ts      string
 }
+
+type createConversationParams struct {
+	name      string
+	isPrivate bool
+}
+
+type inviteSharedParams struct {
+	channel string
+	emails  []string
+	userIDs []string
+}
 type ConversationsHandler struct {
 	apiProvider *provider.ApiProvider
 	logger      *zap.Logger
@@ -1640,6 +1651,127 @@ func (ch *ConversationsHandler) ConversationsRenameHandler(ctx context.Context, 
 
 	ch.logger.Info("Renamed conversation", zap.String("channel", channel), zap.String("name", renamed.Name))
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully renamed %s to #%s", channel, renamed.Name)), nil
+}
+
+func (ch *ConversationsHandler) ConversationsCreateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsCreateHandler called", zap.Any("params", request.Params))
+
+	params, err := ch.parseParamsToolCreateConversation(request)
+	if err != nil {
+		ch.logger.Error("Failed to parse create-conversation params", zap.Error(err))
+		return nil, err
+	}
+
+	channel, err := ch.apiProvider.Slack().CreateConversationContext(ctx, slack.CreateConversationParams{
+		ChannelName: params.name,
+		IsPrivate:   params.isPrivate,
+	})
+	if err != nil {
+		ch.logger.Error("Slack CreateConversationContext failed", zap.Error(err))
+		return nil, fmt.Errorf("failed to create channel %q: %w", params.name, err)
+	}
+
+	ch.logger.Info("Created conversation", zap.String("channel", channel.ID), zap.String("name", channel.Name))
+	return mcp.NewToolResultText(fmt.Sprintf("Created channel #%s with ID %s", channel.Name, channel.ID)), nil
+}
+
+func (ch *ConversationsHandler) parseParamsToolCreateConversation(request mcp.CallToolRequest) (*createConversationParams, error) {
+	name := request.GetString("name", "")
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+
+	return &createConversationParams{
+		name:      name,
+		isPrivate: request.GetBool("is_private", false),
+	}, nil
+}
+
+func (ch *ConversationsHandler) ConversationsInviteSharedHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsInviteSharedHandler called", zap.Any("params", request.Params))
+
+	if toolConfig := os.Getenv("SLACK_MCP_INVITE_SHARED_TOOL"); toolConfig == "" {
+		ch.logger.Error("Invite-shared tool disabled by default")
+		return nil, errors.New(
+			"by default, the conversations_invite_shared tool is disabled to guard against accidentally sending real Slack Connect invites. " +
+				"To enable it, set the SLACK_MCP_INVITE_SHARED_TOOL environment variable, e.g. 'SLACK_MCP_INVITE_SHARED_TOOL=true'",
+		)
+	}
+
+	params, err := ch.parseParamsToolInviteShared(ctx, request)
+	if err != nil {
+		ch.logger.Error("Failed to parse invite-shared params", zap.Error(err))
+		return nil, err
+	}
+
+	var inviteID string
+	var isLegacySharedChannel bool
+	if len(params.emails) > 0 {
+		inviteID, isLegacySharedChannel, err = ch.apiProvider.Slack().InviteSharedEmailsToConversationContext(ctx, params.channel, params.emails...)
+	} else {
+		inviteID, isLegacySharedChannel, err = ch.apiProvider.Slack().InviteSharedUserIDsToConversationContext(ctx, params.channel, params.userIDs...)
+	}
+	if err != nil {
+		ch.logger.Error("Slack InviteSharedToConversationContext failed", zap.Error(err))
+		return nil, fmt.Errorf("failed to send Slack Connect invite for channel %s: %w", params.channel, err)
+	}
+
+	invitees := params.emails
+	if len(invitees) == 0 {
+		invitees = params.userIDs
+	}
+
+	ch.logger.Info("Sent Slack Connect invite",
+		zap.String("channel", params.channel),
+		zap.Strings("invitees", invitees),
+		zap.String("invite_id", inviteID),
+	)
+	return mcp.NewToolResultText(fmt.Sprintf(
+		"Sent Slack Connect invite for channel %s to [%s] (invite_id=%s, is_legacy_shared_channel=%v)",
+		params.channel, strings.Join(invitees, ", "), inviteID, isLegacySharedChannel,
+	)), nil
+}
+
+func (ch *ConversationsHandler) parseParamsToolInviteShared(ctx context.Context, request mcp.CallToolRequest) (*inviteSharedParams, error) {
+	channel := request.GetString("channel_id", "")
+	if channel == "" {
+		return nil, errors.New("channel_id is required")
+	}
+
+	channel, err := ch.resolveChannelID(ctx, channel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve channel: %w", err)
+	}
+
+	emailsRaw := request.GetString("emails", "")
+	userIDsRaw := request.GetString("user_ids", "")
+	if emailsRaw == "" && userIDsRaw == "" {
+		return nil, errors.New("either emails or user_ids must be provided")
+	}
+	if emailsRaw != "" && userIDsRaw != "" {
+		return nil, errors.New("provide either emails or user_ids, not both")
+	}
+
+	splitAndTrim := func(raw string) []string {
+		tokens := strings.Split(raw, ",")
+		out := make([]string, 0, len(tokens))
+		for _, t := range tokens {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+
+	params := &inviteSharedParams{channel: channel}
+	if emailsRaw != "" {
+		params.emails = splitAndTrim(emailsRaw)
+	} else {
+		params.userIDs = splitAndTrim(userIDsRaw)
+	}
+
+	return params, nil
 }
 
 // sortChannelsByPriority sorts channels: DMs > group_dm > partner > internal
