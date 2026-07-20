@@ -41,6 +41,7 @@ const (
 	ToolConversationsRename         = "conversations_rename"
 	ToolConversationsCreate         = "conversations_create"
 	ToolConversationsInvite         = "conversations_invite"
+	ToolConversationsKick           = "conversations_kick"
 	ToolConversationsInviteShared   = "conversations_invite_shared"
 	ToolChannelsList                = "channels_list"
 	ToolChannelsMe                  = "channels_me"
@@ -72,6 +73,7 @@ var ValidToolNames = []string{
 	ToolConversationsRename,
 	ToolConversationsCreate,
 	ToolConversationsInvite,
+	ToolConversationsKick,
 	ToolConversationsInviteShared,
 	ToolChannelsList,
 	ToolChannelsMe,
@@ -477,6 +479,22 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.Description("Comma-separated list of Slack user IDs, @handles, or emails to invite, e.g. 'U0123456,U0654321' or '@iffat.hasan'."),
 			),
 		), conversationsHandler.ConversationsInviteHandler)
+	}
+
+	if shouldAddTool(ToolConversationsKick, enabledTools, "SLACK_MCP_KICK_TOOL") {
+		s.AddTool(mcp.NewTool(ToolConversationsKick,
+			mcp.WithDescription("Remove (kick) a single existing member from a public or private channel."),
+			mcp.WithTitleAnnotation("Kick User"),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithString("channel_id",
+				mcp.Required(),
+				mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... (e.g., #general)."),
+			),
+			mcp.WithString("user_id",
+				mcp.Required(),
+				mcp.Description("A single Slack user to remove, given as a user ID, @handle, or email, e.g. 'U0123456', '@iffat.hasan', or 'iffat@example.com'."),
+			),
+		), conversationsHandler.ConversationsKickHandler)
 	}
 
 	if shouldAddTool(ToolConversationsInviteShared, enabledTools, "SLACK_MCP_INVITE_SHARED_TOOL") {

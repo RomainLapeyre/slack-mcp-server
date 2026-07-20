@@ -157,6 +157,11 @@ type inviteParams struct {
 	channel string
 	users   []string
 }
+
+type kickParams struct {
+	channel string
+	user    string
+}
 type ConversationsHandler struct {
 	apiProvider *provider.ApiProvider
 	logger      *zap.Logger
@@ -1742,6 +1747,51 @@ func (ch *ConversationsHandler) parseParamsToolInvite(ctx context.Context, reque
 	}
 
 	return &inviteParams{channel: channel, users: userIDs}, nil
+}
+
+func (ch *ConversationsHandler) ConversationsKickHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsKickHandler called", zap.Any("params", request.Params))
+
+	params, err := ch.parseParamsToolKick(ctx, request)
+	if err != nil {
+		ch.logger.Error("Failed to parse kick params", zap.Error(err))
+		return nil, err
+	}
+
+	if err := ch.apiProvider.Slack().KickUserFromConversationContext(ctx, params.channel, params.user); err != nil {
+		ch.logger.Error("Slack KickUserFromConversationContext failed", zap.Error(err))
+		return nil, fmt.Errorf("failed to remove user %s from channel %s: %w", params.user, params.channel, err)
+	}
+
+	ch.logger.Info("Removed user from conversation", zap.String("channel", params.channel), zap.String("user", params.user))
+	return mcp.NewToolResultText(fmt.Sprintf("Removed %s from %s", params.user, params.channel)), nil
+}
+
+func (ch *ConversationsHandler) parseParamsToolKick(ctx context.Context, request mcp.CallToolRequest) (*kickParams, error) {
+	channel := request.GetString("channel_id", "")
+	if channel == "" {
+		return nil, errors.New("channel_id is required")
+	}
+
+	channel, err := ch.resolveChannelID(ctx, channel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve channel: %w", err)
+	}
+
+	raw := request.GetString("user_id", "")
+	if raw == "" {
+		return nil, errors.New("user_id is required and must be a Slack user ID, @handle, or email")
+	}
+
+	userIDs, err := ch.resolveUserTokens(ctx, raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(userIDs) != 1 {
+		return nil, errors.New("user_id must resolve to exactly one Slack user")
+	}
+
+	return &kickParams{channel: channel, user: userIDs[0]}, nil
 }
 
 func (ch *ConversationsHandler) ConversationsInviteSharedHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

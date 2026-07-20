@@ -226,6 +226,7 @@ type SlackAPI interface {
 	RenameConversationContext(ctx context.Context, channelID, channelName string) (*slack.Channel, error)
 	CreateConversationContext(ctx context.Context, params slack.CreateConversationParams) (*slack.Channel, error)
 	InviteUsersToConversationContext(ctx context.Context, channelID string, users ...string) (*slack.Channel, error)
+	KickUserFromConversationContext(ctx context.Context, channelID string, user string) error
 	InviteSharedEmailsToConversationContext(ctx context.Context, channelID string, emails ...string) (string, bool, error)
 	InviteSharedUserIDsToConversationContext(ctx context.Context, channelID string, userIDs ...string) (string, bool, error)
 
@@ -429,6 +430,10 @@ func (c *MCPSlackClient) CreateConversationContext(ctx context.Context, params s
 
 func (c *MCPSlackClient) InviteUsersToConversationContext(ctx context.Context, channelID string, users ...string) (*slack.Channel, error) {
 	return c.slackClient.InviteUsersToConversationContext(ctx, channelID, users...)
+}
+
+func (c *MCPSlackClient) KickUserFromConversationContext(ctx context.Context, channelID string, user string) error {
+	return c.slackClient.KickUserFromConversationContext(ctx, channelID, user)
 }
 
 func (c *MCPSlackClient) InviteSharedEmailsToConversationContext(ctx context.Context, channelID string, emails ...string) (string, bool, error) {
